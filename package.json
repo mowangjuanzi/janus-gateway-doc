@@ -1,0 +1,17 @@
+{
+  "name": "janus-gateway-doc",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "vitepress": "2.0.0-alpha.16"
+  }
+}
