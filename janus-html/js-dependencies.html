@@ -1,0 +1,83 @@
+<p>Certain dependencies of <code>janus.js</code> may be passed during library initialization as a property list containing the following keys:</p>
+<ol type="1">
+<li><code>newWebSocket:</code> a function which given WebSockets server and protocol arguments should return a new WebSocket (or something that acts like it)</li>
+<li><code>webRTCAdapter:</code> an <code>adapter</code> object such as provided by the <a href="https://github.com/webrtc/adapter">webrtc-adapter</a> library</li>
+<li><code>isArray:</code> a function which tests if a given argument is a JavaScript array</li>
+<li><code>checkJanusExtension:</code> a function which tests if the Janus Screensharing extension for Chrome is installed/available. This can be done by testing whether or not an element with an <code>id</code> attribute value of <code>janus-extension-installed</code> is present.</li>
+<li><code>httpAPICall:</code> a function which given an url and options argument performs an HTTP API request to Janus. This function is not as straightforward to implement, see the section on <a class="el" href="#js-http-apicall">httpAPICall</a> below for details.</li>
+</ol>
+<p>Depending on your needs you do not have to provide all these dependencies, e.g. you do not need to implement the <code>httpAPICall</code> function if your application relies exclusively on WebSockets to access the Janus API.</p>
+<p>Two implementations of the dependencies object are provided by <code>janus.js:</code> </p>
+<ol type="1">
+<li><code>Janus.useDefaultDependencies</code> </li>
+<li><code>Janus.useOldDependencies</code> </li>
+</ol>
+<p>In turn, each of these implementations accept their dependencies as arguments or fallback on certain global variables. Below follows an overview:</p>
+<h1 class="doxsection"><a class="anchor" id="js-default-deps"></a>
+Janus.useDefaultDependencies</h1>
+<p>The <code>Janus.useDefaultDependencies</code> method relies on the following native browser APIs:</p>
+<ol type="1">
+<li><code>Promise:</code> support for <code>Promises</code> as standardised in ES 6 (<a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises">https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Using_promises</a>)</li>
+<li><code>fetch:</code> support for the <code>fetch</code> API (<a href="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API">https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API</a>)</li>
+<li><code>WebSocket:</code> support for the <code>WebSocket</code> API (<a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API">https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API</a>)</li>
+<li><code>document.querySelector:</code> support for the <code>document.querySelector</code> API (<a href="https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector">https://developer.mozilla.org/en-US/docs/Web/API/Document/querySelector</a>)</li>
+</ol>
+<p>Additionally the <code>adapter</code> object from the <a href="https://github.com/webrtc/adapter">webrtc-adapter</a> library is also required. These dependencies may either be passed explicitly to the function as a property list with keys of the same name, or if omitted the function will fallback to relying on global variables of that name instead.</p>
+<p>Example: </p><pre class="fragment">        var customDependencies = Janus.useDefaultDependencies({
+                fetch: myCustomFetchImplementation // myCustomFetchImplementation should provide a compatible fetch() API
+        });
+
+        var relyingOnGlobalsEntirely = Janus.useDefaultDependencies();
+</pre><p>Being able to passe dependencies like this is especially useful in the context of modern ES modules:</p>
+<pre class="fragment">import adapter from 'webrtc-adapter';
+//  other imports elided
+
+const setupDeps = () =&gt; Janus.useDefaultDependencies({
+        adapter,
+        // other dependencies elided
+});
+
+export const initialiseJanusLibrary = () =&gt; Janus.init({dependencies: setupDeps()});
+</pre><h1 class="doxsection"><a class="anchor" id="js-old-deps"></a>
+Janus.useOldDependencies</h1>
+<p>The <code>Janus.useOldDependencies</code> method relies on:</p>
+<ol type="1">
+<li><code>jQuery:</code> the JQuery library (<a href="http://jquery.com/">http://jquery.com/</a>)</li>
+<li><code>WebSocket:</code> support for the <code>WebSocket</code> API (<a href="https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API">https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API</a>)</li>
+<li><code>adapter:</code> the <code>adapter</code> object from the <a href="https://github.com/webrtc/adapter">webrtc-adapter</a> library</li>
+</ol>
+<p>This function provides a simple upgrade path for existing applications which are heavily tied to jQuery (especially since previous versions of <code>janus.js</code> depended on it).</p>
+<h1 class="doxsection"><a class="anchor" id="js-http-apicall"></a>
+httpAPICall</h1>
+<p>The <code>httpAPICall</code> function is used to issue API calls to the Janus HTTP(S) interfaces. It will be passed two arguments:</p>
+<ol type="1">
+<li><code>url:</code> a string which refers to the (server) URL of the API endpoint to contact</li>
+<li><code>options</code> a property list (see below)</li>
+</ol>
+<p>Any return values from the <code>httpAPICall</code> function will be ignored.</p>
+<p>When working with HTTP request or response bodies, the <code>httpAPICall</code> is responsible for serialisation to, and deserialisation from the 'wire format' (JSON). That is: the <code>httpAPICall</code> must transform objects to JSON or parse JSON as and when required. Similarly, the <code>httpAPICall</code> is also responsible for setting appropriate HTTP <code>Content-Type</code> (application/json) and/or <code>Accept</code> headers.</p>
+<p>The <code>options</code> argument may contain the following keys:</p>
+<ol type="1">
+<li><code>timeout:</code> a timeout in milliseconds which should be imposed on the request. The <code>httpAPICall</code> implementation is required to implement support for imposing timeouts on HTTP API requests.</li>
+<li><code>body:</code> payload to include as body of the outgoing HTTP request. The <code>httpAPICall</code> must encode it in the 'wire format' (JSON).</li>
+<li><code>withCredentials:</code> a boolean indicating whether or not HTTP credentials should be sent</li>
+<li><code>success:</code> a callback which should be dispatched when an API request was successful.</li>
+<li><code>error:</code> a callback which should be dispatched when an API request was unsuccessful, or timed out</li>
+<li><code>async:</code> a boolean hint which indicates whether or not asynchronous requests are desirable. This hint is a primarily a remnant for backwards compatible behaviour when working with jQuery.</li>
+</ol>
+<p>The <code>success</code> callback should be passed the deserialised API response body. The <code>error</code> callback accepts two arguments: a descriptive status text string and the raw error object which caused the <code>error</code> callback to be invoked.</p>
+<dl class="section note"><dt>Note</dt><dd>The <code>httpAPICall</code> represents the primary way to intercept HTTP(S) API calls issued from within the <code>janus.js</code> library. You can use this mechanism to augment outgoing requests with additional headers or to intercept responses. For example:</dd></dl>
+<ol type="1">
+<li>You can support authentication schemes based on the HTTP <code>Authorization</code> header by injecting it into outgoing API requests and routing them through a proxy.</li>
+<li>You can intercept incoming responses and extract data from custom header values generated by a proxy.</li>
+<li>You can combine both to implement a robust defence against <a href="https://www.owasp.org/index.php/Cross-Site_Request_Forgery_(CSRF)">CSRF</a></li>
+<li>You can reroute the control flow entirely, and e.g. use <code>httpAPICall</code> as an action creator in your <a href="http://redux.js.org/">Redux</a> application.</li>
+</ol>
+<h1 class="doxsection"><a class="anchor" id="js-extension"></a>
+Custom Screensharing Extension for Chrome</h1>
+<p>To use a different extension for screensharing permissions in Chrome you can pass a <code>extension</code> object to <code>Janus.useDefaultDependencies</code> and <code>Janus.useOldDependencies</code>. The object should provide the following methods:</p>
+<ol type="1">
+<li><code>init()</code>: Do any setup work here. Will be called once when the dependencies are loaded.</li>
+<li><code>isInstalled()</code>: should return a boolean indicating whether the Extension was detected and is ready to use.</li>
+<li><code>getScreen(callback)</code>: make a call to the extension to get a <code>streamId</code> here. The streamId can be obtained from chrome using <a href="https://developer.chrome.com/extensions/desktopCapture">chrome.desktopCapture.chooseDesktopMedia()</a>. When the request is successful pass the <code>streamId</code> back using <span class="tt">callback(null, streamId)</span>, otherwise pass an <code>Error</code> object like <code>callback(error)</code> </li>
+</ol>

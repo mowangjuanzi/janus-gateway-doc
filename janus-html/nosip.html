@@ -1,0 +1,67 @@
+<p>This is quite a basic plugin, as it only takes care of acting as an RTP bridge. It is named "NoSIP" since, as the name suggests, signalling takes no place here, and is entirely up to the application. The typical usage of this application is something like this:</p>
+<ol type="1">
+<li>a WebRTC application handles signalling on its own (e.g., SIP), but needs to interact with a peer that doesn't support WebRTC (DTLS/ICE);</li>
+<li>it creates a handle with the NoSIP plugin, creates a JSEP SDP offer, and passes it to the plugin;</li>
+<li>the plugin creates a barebone SDP that can be used to communicate with the legacy peer, binds to the ports for RTP/RTCP, and sends this plain SDP back to the application;</li>
+<li>the application uses this barebone SDP in its signalling, and expects an answer from the peer;</li>
+<li>the SDP answer from the peer will be barebone as well, and so unfit for WebRTC usage; as such, the application passes it to the plugin as the answer to match the offer created before;</li>
+<li>the plugin matches the answer to the offer, and starts exchanging RTP/RTCP with the legacy peer: media coming from the peer is relayed via WebRTC to the application, and WebRTC stuff coming from the application is relayed via plain RTP/RTCP to the legacy peer.</li>
+</ol>
+<p>The same behaviour can be followed if the application is the callee instead, with the only difference being that the barebone offer will come from the peer in this case, and the application will ask the NoSIP plugin for a barebone answer instead.</p>
+<p>As you can see, the behaviour is pretty much the same as the SIP plugin, with the key difference being that in this case there's no SIP stack in the plugin itself. All signalling is left to the application, and Janus (via the NoSIP plugin) is only responsible for bridging the media. This might be more appropriate than the SIP plugin in cases where developers want to keep control on the signalling layer, while still involving a server of sorts. Of course, SIP is just an example here: other signalling protocols may be involved as well (e.g., IAX, XMPP, others). The NoSIP plugin, though, will generate and expect plain SDP, so you'll need to take care of any adaptation that may be needed to make this work with the signalling protocol of your choice.</p>
+<h1 class="doxsection"><a class="anchor" id="nosipapi"></a>
+NoSIP Plugin API</h1>
+<p>The plugin mainly supports two requests, <code>generate</code> and <code>process</code>, which are both asynchronous. The <code>generate</code> request take a JSEP offer or answer, and generates a barebone SDP the "legacy" application can use; the <code>process</code> request, on the other hand, processes a remote barebone SDP, and matches it to the plugin may have generated before, in order to then return a JSEP offer or answer that can be used to setup a PeerConnection.</p>
+<p>The <code>generate</code> request must be formatted as follows:</p>
+<pre class="fragment">{
+        "request" : "generate",
+        "info" : "&lt;opaque string that the user can provide for context; optional&gt;",
+        "srtp" : "&lt;whether to mandate (sdes_mandatory) or offer (sdes_optional) SRTP support; optional&gt;",
+        "srtp_profile" : "&lt;SRTP profile to negotiate, in case SRTP is offered; optional&gt;"
+}
+</pre><p>As anticipated, this requires a JSEP offer or answer passed via Janus API as part of a WebRTC PeerConnection negotiation. If the conversion of the WebRTC JSEP SDP to barebone SDP is successful, a <code>generated</code> event is sent back to the user:</p>
+<pre class="fragment">{
+        "event" : "generated",
+        "type" : "&lt;offer|answer, depending on the nature of the provided JSEP&gt;",
+        "sdp" : "&lt;barebone SDP content&gt;",
+        "unique_id" : "&lt;unique UUID of this session in this plugin, needed for some requests&gt;
+}
+</pre><p>The <code>process</code> request, instead, must be formatted as follows:</p>
+<pre class="fragment">{
+        "request" : "process",
+        "type" : "&lt;offer|answer, depending on the nature of the provided SDP&gt;",
+        "sdp" : "&lt;barebone SDP to convert&gt;"
+        "info" : "&lt;opaque string that the user can provide for context; optional&gt;",
+        "srtp" : "&lt;whether to mandate (sdes_mandatory) or offer (sdes_optional) SRTP support; optional&gt;",
+        "srtp_profile" : "&lt;SRTP profile to negotiate, in case SRTP is offered; optional&gt;"
+}
+</pre><p>As anticipated, this requires a "legacy" SDP offer or answer passed via NoSIP plugin messaging, which is why the caller must specify if it's an offer or answer. If the request is successful, a <code>processed</code> event is sent back to the user, along to the JSEP offer or answer that Janus generated out of the barebone SDP:</p>
+<pre class="fragment">{
+        "event" : "processed",
+        "srtp" : "&lt;whether the barebone SDP mandates (sdes_mandatory) or offers (sdes_optional) SRTP support; optional&gt;",
+        "unique_id" : "&lt;unique UUID of this session in this plugin, needed for some requests&gt;
+}
+</pre><p>To close a session you can use the <code>hangup</code> request, which needs no additional arguments, as the whole context can be extracted from the current state of the session in the plugin:</p>
+<pre class="fragment">{
+        "request" : "hangup"
+}
+</pre><p>An <code>hangingup</code> event will be sent back, as this is an asynchronous request.</p>
+<p>Finally, just as in the SIP plugin, the multimedia session can be recorded. Considering the NoSIP plugin also assumes two peers are in a call with each other (although it makes no assumptions on the signalling that ties them together), it works exactly the same way as the SIP plugin dooes when it comes to recording. Specifically, you make use of the <code>recording</code> request to either start or stop a recording, using the following syntax:</p>
+<pre class="fragment">{
+        "request" : "recording",
+        "action" : "&lt;start|stop, depending on whether you want to start or stop recording something&gt;"
+        "audio" : &lt;true|false; whether or not our audio should be recorded&gt;,
+        "video" : &lt;true|false; whether or not our video should be recorded&gt;,
+        "peer_audio" : &lt;true|false; whether or not our peer's audio should be recorded&gt;,
+        "peer_video" : &lt;true|false; whether or not our peer's video should be recorded&gt;,
+        "filename" : "&lt;base path/filename to use for all the recordings&gt;"
+}
+</pre><p>As you can see, this means that the two sides of conversation are recorded separately, and so are the audio and video streams if available. You can choose which ones to record, in case you're interested in just a subset. The <code>filename</code> part is just a prefix, and dictates the actual filenames that will be used for the up-to-four recordings that may need to be enabled.</p>
+<p>A <code>recordingupdated</code> event is sent back in case the request is successful.</p>
+<p>To programmatically send a video keyframe request to either the WebRTC user or the SIP peer (or both), the <code>keyframe</code> request can be used. This request is particularly useful when the SIP peer doesn't support RTCP PLI, and so may use other mechanisms (e.g., via signalling) to ask for a keyframe to get video working. By using this request, the WebRTC user can ask Janus to originate a PLI programmatically. The direction of the keyframe request can be provided by using the <code>user</code> and <code>peer</code> properties: if <code>user</code> is <code>TRUE</code> a keyframe request will be sent by Janus to the WebRTC user; if <code>peer</code> is <code>TRUE</code> a keyframe request will be sent by Janus to the SIP peer. In both cases an RTCP PLI message will be sent. The syntax of the message is the following:</p>
+<pre class="fragment">{
+        "request" : "keyframe",
+        "user" : &lt;true|false; whether or not to send a keyframe request to the WebRTC user&gt;,
+        "peer" : &lt;true|false; whether or not to send a keyframe request to the SIP peer&gt;
+}
+</pre><p>A <code>keyframesent</code> event is sent back in case the request is successful. </p>

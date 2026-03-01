@@ -1,0 +1,45 @@
+<p>This is a trivial EchoTest plugin for Janus, just used to showcase the plugin interface. A peer attaching to this plugin will receive back the same RTP packets and RTCP messages he sends: the RTCP messages, of course, would be modified on the way by the Janus core to make sure they are coherent with the involved SSRCs. In order to demonstrate how peer-provided messages can change the behaviour of a plugin, this plugin implements a simple API based on three messages:</p>
+<ol type="1">
+<li>a message to enable/disable audio (that is, to tell the plugin whether incoming audio RTP packets need to be sent back or discarded);</li>
+<li>a message to enable/disable video (that is, to tell the plugin whether incoming video RTP packets need to be sent back or discarded);</li>
+<li>a message to cap the bitrate (which would modify incoming RTCP REMB messages before sending them back, in order to trick the peer into thinking the available bandwidth is different).</li>
+</ol>
+<h1 class="doxsection"><a class="anchor" id="echoapi"></a>
+Echo Test API</h1>
+<p>There's a single unnamed request you can send and it's asynchronous, which means all responses (successes and errors) will be delivered as events with the same transaction.</p>
+<p>The request has to be formatted as follows. All the attributes are optional, so any request can contain a subset of them:</p>
+<pre class="fragment">{
+        "audio" : true|false,
+        "audiocodec" : "&lt;optional codec name; only used when creating a PeerConnection&gt;",
+        "video" : true|false,
+        "videocodec" : "&lt;optional codec name; only used when creating a PeerConnection&gt;",
+        "videoprofile" : "&lt;optional codec profile to force; only used when creating a PeerConnection, only valid for VP9 (0 or 2) and H.264 (e.g., 42e01f)&gt;",
+        "bitrate" : &lt;numeric bitrate value&gt;,
+        "record" : true|false,
+        "filename" : &lt;base path/filename to use for the recording&gt;,
+        "substream" : &lt;substream to receive (0-2), in case simulcasting is enabled&gt;,
+        "temporal" : &lt;temporal layers to receive (0-2), in case simulcasting is enabled&gt;,
+        "svc" : true|false,
+        "spatial_layer" : &lt;spatial layer to receive (0-2), in case SVC is enabled&gt;,
+        "temporal_layer" : &lt;temporal layers to receive (0-2), in case SVC is enabled&gt;
+}
+</pre><p>When negotiating a new PeerConnection, by default the EchoTest tries to use the preferred audio codecs as set by the user; if for any reason you want to override what the browsers offered first and use a different codec instead (e.g., to try VP9 instead of VP8), you can use the <code>audiocodec</code> property for audio, and <code>videocodec</code> for video. For video codecs supporting a specific profile negotiation (VP9 and H.264), you can specify which profile you're interested in using the <code>videoprofile</code> property.</p>
+<p>All the other settings can be applied dynamically during the session: <code>audio</code> instructs the plugin to do or do not bounce back audio frames; <code>video</code> does the same for video; <code>bitrate</code> caps the bandwidth to force on the browser encoding side (e.g., 128000 for 128kbps); <code>record</code> enables or disables the recording of this peer; in case recording is enabled, <code>filename</code> allows to specify a base path/filename to use for the files (-audio.mjr, -video.mjr and -data.mjr are automatically appended); finally, in case the session uses simulcasting, <code>substream</code> and <code>temporal</code> can be used to manually pick which substream and/or temporal layer should be received back, while <code>spatial_layer</code> and <code>temporal_layer</code> provide the same functionality but within the context of SVC.</p>
+<p>A JSEP offer can be sent along any request to negotiate a PeerConnection: in that case, a JSEP answer will be provided with the asynchronous response notification. Other requests (e.g., to dynamically manipulate the bitrate while testing) have to be sent without any JSEP payload attached, unless you want to renegotiate a session (e.g., to add/remove a media stream, or force an ICE restart): in case of renegotiations, the same rules as the first JSEP offer apply.</p>
+<p>A successful request will result in an <code>ok</code> event:</p>
+<pre class="fragment">{
+        "echotest" : "event",
+        "result": "ok"
+}
+</pre><p>An error instead will provide both an error code and a more verbose description of the cause of the issue:</p>
+<pre class="fragment">{
+        "echotest" : "event",
+        "error_code" : &lt;numeric ID, check Macros below&gt;,
+        "error" : "&lt;error description as a string&gt;"
+}
+</pre><p>If the plugin detects a loss of the associated PeerConnection, a "done" notification is triggered to inform the application the Echo Test session is over:</p>
+<pre class="fragment">{
+        "echotest" : "event",
+        "result": "done"
+}
+</pre> 

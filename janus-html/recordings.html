@@ -1,0 +1,34 @@
+<p>Janus supports recordings of WebRTC sessions out of the box, assuming plugins take advantage of the feature. Specifically, recording as a functionality is implemented in the Janus core, specifically using the <a class="el" href="structjanus__recorder.html" title="Structure that represents a recorder.">janus_recorder</a> structure and the related methods. When enabled, media streams are recorded to a custom format (that we introduce below): as such, it's then up to individual plugins to expose ways for users to configure/start/stop recordings, and using the core functionality to actually implementing the recording part. At the time of writing, most plugins do implement it.</p>
+<dl class="section note"><dt>Note</dt><dd>This section covers recordings for the purpose of storage, archiving or further manipulation. If you're interested in recording for the purpose of debugging media sessions, you may want to refer to the <a class="el" href="admin.html#adminpcap">Capturing unencrypted WebRTC traffic</a> documentation instead, as that would allow you to capture unencrypted RTP/RTCP packets sent/received to/from Janus in a format tools like Wireshark and tcpdump support.</dd></dl>
+<h1 class="doxsection"><a class="anchor" id="mjr"></a>
+Meetecho Janus Recordings</h1>
+<p>As anticipated, the <a class="el" href="structjanus__recorder.html" title="Structure that represents a recorder.">janus_recorder</a> core functionality saves media streams to a custom format that we call the "Meetecho Janus Recordings" format. When saved to file, the custom <code>mjr</code> extension is used.</p>
+<p>Each <code>mjr</code> file contains a single media stream. This means that if if you want to record, for instance, an audio/video stream, you'll need two separate <code>mjr</code> files: one just for audio, and the other just for video. Each <code>mjr</code> file then basically just contains a structured dump of the RTP packets exactly as they arrived: after a short header that describes the data contained in the recording (i.e., type of media, the codec, when it was created, when the first packet was written), each RTP packet is saved together with info on its length. A partial timestamp of when the packet was received is also stored, as this allows for more realistic conversions to <code>pcap</code> format when needed.</p>
+<pre class="fragment">+-----------------------------------------------+
+|               MJR00002 (8 bytes)              |
++-----------------------------------------------+
+| LEN (2 bytes) | JSON header (variable length) |
++-----------------------------------------------+
+|    MEET (4 bytes)     |  Recvd Time (4 bytes) |
++-----------------------------------------------+
+| LEN (2 bytes) | RTP packet (variable length)  |
++-----------------------------------------------+
+|    MEET (4 bytes)     |  Recvd Time (4 bytes) |
++-----------------------------------------------+
+| LEN (2 bytes) | RTP packet (variable length)  |
++-----------------------------------------------+
+|    MEET (4 bytes)     |  Recvd Time (4 bytes) |
++-----------------------------------------------+
+| LEN (2 bytes) | RTP packet (variable length)  |
++-----------------------------------------------+
+|                     ...                       |
++-----------------------------------------------+
+</pre><p>This makes the recording process very lightweight, as Janus doesn't need to do anything more that just saving the packets to file: no CPU intensive operation like transcoding or frame manipulation is done by the <a class="el" href="structjanus__recorder.html" title="Structure that represents a recorder.">janus_recorder</a> instances. RTP packets don't even need to be saved in order, as the <code>mjr</code> files can be post-processed later and, as we'll see, re-ordering of the stored packets is part of the activities that our post-processor performs when doing so.</p>
+<h2 class="doxsection"><a class="anchor" id="mjrdata"></a>
+Saving data channels</h2>
+<p>While we've so far only mentioned RTP packets, and so audio and video, Janus actually also natively supports the recording of datachannels. In that case, the recording will be a structured dump not of RTP packets, but of the individual messages that were received. Just as we said for audio and video, since <code>mjr</code> files only cover individual streams, data recordings will need their own instance as well.</p>
+<h1 class="doxsection"><a class="anchor" id="mjrproc"></a>
+Post-processing the recordings</h1>
+<p>Once a recording is available in the <code>mjr</code> format, it obviously needs some transformation before it can be consumed by external tools, e.g., media players or third-party applications for further processing (like muxing audio and video together, or mixing multiple video streams together).</p>
+<p>Out of the box, Janus comes with a simple post-processing tool whose only job is re-ordering the available RTP packets, extracting the media frames from the RTP packets (which for video might mean extracting the same frame from multiple packets in sequence), and saving the media frames to a well-known media format. To make this simple, this tool can, for instance, convert an audio <code>mjr</code> recording to an <code>opus</code> file, or a video <code>mjr</code> recording containing VP8 packets to a <code>webm</code> file instead. Notice that no transcoding is done by this postprocessor either: frames are extracted exactly as they were sent originally, and just saved to a media container in a way that multimedia applications can consume them. If further processing is needed (e.g., muxing, mixing, transcoding, or other), then this is up to third-party applications that can work with existing media files.</p>
+<p>For more information on the Janus recordings post-processor, check the documentation for the <a class="el" href="janus-pp-rec_8c.html" title="Simple utility to post-process .mjr Recordings saved by Janus.">janus-pp-rec.c</a> executable. </p>
