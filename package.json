@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
-    "preview": "vitepress preview"
+    "dev": "vitepress dev janus-vite",
+    "build": "vitepress build janus-vite",
+    "preview": "vitepress preview janus-vite"
   },
   "keywords": [],
   "author": "",
